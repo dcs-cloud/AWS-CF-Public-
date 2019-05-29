@@ -1,0 +1,68 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  CloudTrailName:
+    Description: 'Enter the name for cloudtrail'
+    Type: String
+    Default: 'itellicouldtrail'
+  CloudTrailBucketName:
+    Description: 'S3 bucket for cloudtrail'
+    Type: String
+    Default: 's3itellitrailog'
+  prefixforLOG:
+    Description: 'Enter the prefix for log file'
+    Type: String
+    Default: 'itelli'
+Resources:
+  cloudtrailbucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref CloudTrailBucketName
+      AccessControl: Private
+      LifecycleConfiguration:
+        Rules:
+        - Id: GlacierRule
+          Prefix: glacier
+          Status: Enabled
+          ExpirationInDays: '365'
+          Transitions:
+            - TransitionInDays: '180'
+              StorageClass: Glacier
+      VersioningConfiguration:
+        Status: Suspended
+  s3policy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref cloudtrailbucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AWSCloudTrailAclCheck
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: 's3:GetBucketAcl'
+            Resource: !Sub 'arn:aws:s3:::${cloudtrailbucket}'
+          - Sid: AWSCloudTrailWrite
+            Effect: Allow
+            Principal:
+              Service: 'cloudtrail.amazonaws.com'
+            Action: 's3:PutObject'
+            Resource: !Sub 'arn:aws:s3:::${cloudtrailbucket}/${prefixforLOG}/AWSLogs/${AWS::AccountId}/*'
+            Condition:
+              StringEquals:
+                's3:x-amz-acl': 'bucket-owner-full-control'
+  trailCFCloudtrail:
+    Type: 'AWS::CloudTrail::Trail'
+    Properties:
+      IncludeGlobalServiceEvents: true
+      IsLogging: 'true'
+      IsMultiRegionTrail: true
+      S3KeyPrefix: !Ref prefixforLOG
+      S3BucketName: !Ref cloudtrailbucket
+      Tags:
+        - Key: Name
+          Value: !Ref CloudTrailName
+      TrailName: !Ref CloudTrailName
+    DependsOn:
+    - s3policy
+Description: 'To deploy cloudtrail'
